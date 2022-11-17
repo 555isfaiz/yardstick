@@ -34,7 +34,7 @@ func (p *StaticProvisioner) Provision(num, basePort int) ([]*Node, error) {
 	p.count += num
 	nodes := make([]*Node, num)
 	for i, address := range addresses {
-		nodes[i] = NewNode(p.user, address, "", p.workerBinaryPath)
+		nodes[i] = NewNode(p.user, p.key, address, "", p.workerBinaryPath)
 	}
 	// Wait for node server to become active
 	// TODO make nicer
@@ -116,7 +116,7 @@ func (das *DAS5Provisioner) Provision(num, basePort int) ([]*Node, error) {
 	das.reservations = append(das.reservations, reservationNumber)
 	nodes := make([]*Node, num)
 	for i, address := range nodeAddresses {
-		node := NewNode(das.user, address, das.host, das.workerBinaryPath)
+		node := NewNode(das.user, "", address, das.host, das.workerBinaryPath)
 		if err != nil {
 			return nil, err
 		}

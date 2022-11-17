@@ -94,7 +94,7 @@ func worker() {
 		r.StaticFS(fmt.Sprintf("/program/dir/%v", uuid), http.Dir(fmt.Sprintf("./%v", uuid)))
 		r.GET(fmt.Sprintf("/program/get/%v", uuid), func(c *gin.Context) {
 			c.Writer.Header().Set("Content-type", "application/octet-stream")
-			c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename='%v.zip'", uuid))
+			c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%v.zip", uuid))
 			zipWriter := zip.NewWriter(c.Writer)
 			defer zipWriter.Close()
 			err := filepath.WalkDir(uuid, func(path string, d fs.DirEntry, err error) error {

@@ -24,6 +24,7 @@ import (
 type Node struct {
 	// User used to log in to the remote node
 	user string
+	key  string
 	// Host or IP of the remote node, reachable from the sshClient.
 	host string
 	// A jump host proxy used to reach the node
@@ -56,6 +57,7 @@ func ResetPort() {
 
 func (node *Node) scpCommand(local, remote string) *exec.Cmd {
 	args := make([]string, 0)
+	args = append(args, "-i", node.key)
 	if node.jumpHost != "" {
 		args = append(args, "-J", node.jumpHost)
 	}
@@ -65,6 +67,7 @@ func (node *Node) scpCommand(local, remote string) *exec.Cmd {
 
 func (node *Node) sshCommand(command string, args ...string) *exec.Cmd {
 	commandArgs := make([]string, 0)
+	commandArgs = append(commandArgs, "-i", node.key)
 	commandArgs = append(commandArgs, "-o", "StrictHostKeyChecking=accept-new")
 	if node.jumpHost != "" {
 		commandArgs = append(commandArgs, fmt.Sprintf("-J %v", node.jumpHost))
@@ -75,9 +78,10 @@ func (node *Node) sshCommand(command string, args ...string) *exec.Cmd {
 	return exec.Command("ssh", commandArgs...)
 }
 
-func NewNode(user, host, proxy, binary string) *Node {
+func NewNode(user, key, host, proxy, binary string) *Node {
 	node := &Node{
 		user:     user,
+		key:      key,
 		host:     host,
 		jumpHost: proxy,
 		client:   &http.Client{Timeout: 10 * time.Second},
@@ -99,7 +103,7 @@ func NewNode(user, host, proxy, binary string) *Node {
 		panic(err)
 	}
 
-	node.remotePort = nextPort()
+	node.remotePort = 8888
 	// Make remote tmp file executable and run it
 	startCmd := node.sshCommand("cd", node.tmpDirPath, ";",
 		"chmod", "+x", node.tmpFilePath, ";",
@@ -123,7 +127,7 @@ func NewNode(user, host, proxy, binary string) *Node {
 	}
 	node.tunnel = tunnelCmd
 
-	laddr, err := url.Parse(fmt.Sprintf("http://localhost:%v", nodeLocalPort))
+	laddr, err := url.Parse(fmt.Sprintf("http://%v:%v", host, "8888"))
 	if err != nil {
 		panic(err)
 	}
