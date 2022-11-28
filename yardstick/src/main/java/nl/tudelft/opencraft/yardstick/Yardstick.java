@@ -123,7 +123,7 @@ public class Yardstick {
                 ex = new Experiment12LatencyAndWalkAround(id, game, behaviorConfig);
                 break;
             case "13":
-                ex = new Experiment13SAMOVAR(id, game, behaviorConfig, experimentDuration);
+                ex = new Experiment13SAMOVAR(id, game, behaviorConfig, experimentConfig, experimentDuration);
                 break;
             default:
                 System.out.println("Invalid experiment: " + behaviorName);

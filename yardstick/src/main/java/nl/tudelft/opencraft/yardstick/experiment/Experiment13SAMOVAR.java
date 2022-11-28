@@ -18,7 +18,13 @@
 
 package nl.tudelft.opencraft.yardstick.experiment;
 
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
 import com.typesafe.config.Config;
+
 import nl.tudelft.opencraft.yardstick.Yardstick;
 import nl.tudelft.opencraft.yardstick.bot.Bot;
 import nl.tudelft.opencraft.yardstick.bot.BotManager;
@@ -26,41 +32,37 @@ import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskExecutor;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskStatus;
 import nl.tudelft.opencraft.yardstick.game.GameArchitecture;
 import nl.tudelft.opencraft.yardstick.model.SAMOVARModel;
-import nl.tudelft.opencraft.yardstick.model.box.BoundingBoxMovementBuilder;
-import nl.tudelft.opencraft.yardstick.model.box.BoundingBoxMovementModel;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 // TODO remove this class once we have a good BotModel interface.
-public class Experiment13SAMOVAR extends AbstractModelExperiment {
+public class Experiment13SAMOVAR extends Experiment {
 
     private final Config behaviorConfig;
+    private final Config samovarConfig;
 
-    private BoundingBoxMovementModel movement;
+    private SAMOVARModel samovar;
 
     private long startMillis;
     private Duration experimentDuration;
     private BotManager botManager;
     private ScheduledFuture<?> runningBotManager;
 
-    public Experiment13SAMOVAR(int nodeID, GameArchitecture game, Config behaviorConfig, Duration experimentDuration) {
-        super(13, nodeID, game, experimentDuration, "Bots walking around based on the SAMOVAR movement model.",
-                new SAMOVARModel(mapConfig));
+    public Experiment13SAMOVAR(int nodeID, GameArchitecture game, Config behaviorConfig, Config samovarConfig, Duration experimentDuration) {
+        super(13, nodeID, game, "latency and walk experiment with SAMOVAR model");
         this.behaviorConfig = behaviorConfig;
+        this.samovarConfig = samovarConfig;
     }
-
+    
     @Override
     protected void before() {
         this.experimentDuration = behaviorConfig.getDuration("duration");
         int botsTotal = behaviorConfig.getInt("bots");
+        this.samovar = new SAMOVARModel(samovarConfig, botsTotal);
         Duration timeBetweenJoins = behaviorConfig.getDuration("joininterval");
         int numberOfBotsPerJoin = behaviorConfig.getInt("numbotsperjoin");
-        this.movement = new BoundingBoxMovementBuilder().fromConfig(behaviorConfig.getConfig("box"));
         this.startMillis = System.currentTimeMillis();
-
+        
+        samovar.onBefore();
+        
         botManager = new BotManager(game);
         botManager.setPlayerStepIncrease(numberOfBotsPerJoin);
         botManager.setPlayerCountTarget(botsTotal);
@@ -78,7 +80,7 @@ public class Experiment13SAMOVAR extends AbstractModelExperiment {
     private void botTick(Bot bot) {
         TaskExecutor t = bot.getTaskExecutor();
         if (t == null || t.getStatus().getType() != TaskStatus.StatusType.IN_PROGRESS) {
-            var futureTaskExecutor = movement.newTask(bot);
+            var futureTaskExecutor = samovar.newTask(bot);
             bot.setTaskExecutor(futureTaskExecutor);
         }
     }
