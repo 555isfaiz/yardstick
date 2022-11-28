@@ -27,6 +27,7 @@ import nl.tudelft.opencraft.yardstick.experiment.Experiment;
 import nl.tudelft.opencraft.yardstick.experiment.Experiment10GenerationStressTest;
 import nl.tudelft.opencraft.yardstick.experiment.Experiment11Latency;
 import nl.tudelft.opencraft.yardstick.experiment.Experiment12LatencyAndWalkAround;
+import nl.tudelft.opencraft.yardstick.experiment.Experiment13SAMOVAR;
 import nl.tudelft.opencraft.yardstick.experiment.Experiment3WalkAround;
 import nl.tudelft.opencraft.yardstick.experiment.Experiment4MultiWalkAround;
 import nl.tudelft.opencraft.yardstick.experiment.Experiment5SimpleWalk;
@@ -120,6 +121,9 @@ public class Yardstick {
                 break;
             case "12":
                 ex = new Experiment12LatencyAndWalkAround(id, game, behaviorConfig);
+                break;
+            case "13":
+                ex = new Experiment13SAMOVAR(id, game, behaviorConfig, experimentDuration);
                 break;
             default:
                 System.out.println("Invalid experiment: " + behaviorName);
