@@ -70,7 +70,7 @@ public class SAMOVARModel implements BotModel {
     }
 
     void generateMap() {
-        // TODO
+    	sampleWaypoint();
     }
 
     /**
@@ -143,7 +143,8 @@ public class SAMOVARModel implements BotModel {
         return lognormalDistribution(apConfig.getDouble("avg"), apConfig.getDouble("std"));
     }
     
-    ArrayList<Double> getAreaPopularityList(int waypointNumber) {
+    ArrayList<Double> getAreaPopularityList() {
+    	int waypointNumber = samovarConfig.getInt("waypointNumber");
     	ArrayList<Double> areaPopularityList = new ArrayList<Double>();
     	for(int i = 0; i < waypointNumber; i++) {
     		areaPopularityList.add(getAreaPopularity());
@@ -153,22 +154,24 @@ public class SAMOVARModel implements BotModel {
     	
     }
     
-    ArrayList<Integer> getAreaLevelList(ArrayList<Double> areaPopularityList, int level, int logBase) throws Exception {
+    ArrayList<Integer> getAreaLevelList(ArrayList<Double> areaPopularityList) throws Exception {
+    	int level = samovarConfig.getInt("levelNumber");
+    	int logBase = samovarConfig.getInt("levelLogBase");
     	ArrayList<Integer> areaLevelList = new ArrayList<Integer>();
-    	int numBinScale = 0;
+    	int totalBin = 0;
     	for (int i = 0; i < level; i++) {
-    		numBinScale += Math.pow(logBase, i);
+    		totalBin += Math.pow(logBase, i);
     	}
-    	int numBinBase = areaPopularityList.size()/numBinScale;
-    	if (numBinBase <= 0) {
-    		throw new Exception("The number of waypoints must be greater then number of bins");
+    	int binWidth = areaPopularityList.size()/totalBin;
+    	if (binWidth <= 0) {
+    		throw new Exception("The number of waypoints must be greater then binWidth");
     	}
     	
-    	int tempLevel = 0;
-    	int numBin = numBinBase;
+    	int tempLevel = 1;
+    	int tempBinUpper = binWidth;
     	for (int i = 1; i <= areaPopularityList.size(); i++) {
-    		if (i > numBin && tempLevel < level) {
-    			numBin += Math.pow(logBase, tempLevel);
+    		if (i > tempBinUpper && tempLevel < level) {
+    			tempBinUpper += binWidth * Math.pow(logBase, tempLevel);
     			tempLevel++; 
     		}
     		areaLevelList.add(tempLevel);
@@ -197,21 +200,37 @@ public class SAMOVARModel implements BotModel {
         return 0.0;
     }
     
-    Graph<Waypoint> sampleWaypoint(int worldWidth, int worldLength, int waypointSize, int waypointNumber) {
+    Graph<Waypoint> sampleWaypoint() {
+    	int worldWidth = samovarConfig.getInt("worldWidth");
+    	int worldLength = samovarConfig.getInt("worldLength");
+    	int waypointSize = samovarConfig.getInt("waypointSize");
+    	int waypointNumber = samovarConfig.getInt("waypointNumber");
     	MutableGraph<Waypoint> map = GraphBuilder.undirected().build();
-    	int numAreaWidth = (int) Math.ceil((double) worldWidth / waypointSize);
-    	int numAreaLength = (int) Math.ceil((double) worldLength / waypointSize);
-    	int[] indexWaypoint = new Random().ints(0, numAreaLength*numAreaWidth).
+    	
+    	int numAreaX = (int) Math.ceil((double) worldWidth / waypointSize);
+    	int numAreaY = (int) Math.ceil((double) worldLength / waypointSize);
+    	
+    	int[] randomWaypsointIndex = new Random().ints(0, numAreaX*numAreaY).
     			distinct().limit(waypointNumber).toArray();
-    	ArrayList<Double> areaPopularityList = getAreaPopularityList(waypointNumber);
+  	  	int[] randomPopularityIndex = new Random().ints(0, waypointNumber).
+  	  			distinct().limit(waypointNumber).toArray();
+    	ArrayList<Double> areaPopularityList = getAreaPopularityList();
     	try {
-			ArrayList<Integer> areaLevelList = getAreaLevelList(areaPopularityList, 2, 10);
-	    	for (int i = 0; i < indexWaypoint.length; i++) {
-	    		int indexX = indexWaypoint[i]%numAreaWidth;
-	    		int indexY = indexWaypoint[i]/numAreaWidth;
-	    		int x = indexX * 10;
-	    		Waypoint waypoint = new Waypoint(1, 2, 
-	    				areaPopularityList.get(indexWaypoint[i]) ,areaLevelList.get(indexWaypoint[i]));
+			ArrayList<Integer> areaLevelList = getAreaLevelList(areaPopularityList);
+	    	for (int i = 0; i < waypointNumber; i++) {
+	    		int indexX = randomWaypsointIndex[i]%numAreaX;
+	    		int indexY = randomWaypsointIndex[i]/numAreaX;
+	    		int x = indexX * waypointSize + 
+	    				(( indexX == numAreaX -1 && worldWidth % waypointSize != 0 )?
+	    						(worldWidth % waypointSize)/2:
+	    						waypointSize/2);
+	    		int y = indexY * waypointSize + 
+	    				(( indexY == numAreaY -1 && worldLength % waypointSize != 0 )?
+	    						(worldLength % waypointSize)/2:
+	    						waypointSize/2);
+	    		Waypoint waypoint = new Waypoint(x, y, 
+	    				areaPopularityList.get(randomPopularityIndex[i]),
+	    				areaLevelList.get(randomPopularityIndex[i]));
 	    		map.addNode(waypoint);
 	    	}
 		} catch (Exception e) {
