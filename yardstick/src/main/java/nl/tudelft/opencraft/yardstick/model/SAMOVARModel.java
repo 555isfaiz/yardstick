@@ -18,11 +18,19 @@
 
 package nl.tudelft.opencraft.yardstick.model;
 
+import java.awt.Point;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.common.graph.Graph;
+import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.MutableGraph;
+import com.google.common.graph.Network;
 import com.typesafe.config.Config;
 
 import nl.tudelft.opencraft.yardstick.bot.Bot;
@@ -34,8 +42,17 @@ import nl.tudelft.opencraft.yardstick.util.Vector3i;
  * Represents the SAMOVAR model.
  */
 public class SAMOVARModel implements BotModel {
-
-    private static Graph map;
+	
+	class Waypoint extends Point{
+		final double weight;
+		final int level;
+		Waypoint(int x, int y, double weight, int level){
+			super(x, y);
+			this.weight = weight;
+			this.level = level;
+		}
+	}
+    private static Graph<Waypoint> map;
     final Random rng = new Random(0);
     final Config samovarConfig;
     final int botsNumber;
@@ -125,12 +142,45 @@ public class SAMOVARModel implements BotModel {
         var apConfig = samovarConfig.getConfig("areaPopularityDistribution");
         return lognormalDistribution(apConfig.getDouble("avg"), apConfig.getDouble("std"));
     }
+    
+    ArrayList<Double> getAreaPopularityList(int waypointNumber) {
+    	ArrayList<Double> areaPopularityList = new ArrayList<Double>();
+    	for(int i = 0; i < waypointNumber; i++) {
+    		areaPopularityList.add(getAreaPopularity());
+    	}
+    	Collections.sort(areaPopularityList);
+    	return areaPopularityList;
+    	
+    }
+    
+    ArrayList<Integer> getAreaLevelList(ArrayList<Double> areaPopularityList, int level, int logBase) throws Exception {
+    	ArrayList<Integer> areaLevelList = new ArrayList<Integer>();
+    	int numBinScale = 0;
+    	for (int i = 0; i < level; i++) {
+    		numBinScale += Math.pow(logBase, i);
+    	}
+    	int numBinBase = areaPopularityList.size()/numBinScale;
+    	if (numBinBase <= 0) {
+    		throw new Exception("The number of waypoints must be greater then number of bins");
+    	}
+    	
+    	int tempLevel = 0;
+    	int numBin = numBinBase;
+    	for (int i = 1; i <= areaPopularityList.size(); i++) {
+    		if (i > numBin && tempLevel < level) {
+    			numBin += Math.pow(logBase, tempLevel);
+    			tempLevel++; 
+    		}
+    		areaLevelList.add(tempLevel);
+    	}
+    	return areaLevelList;
+    }
 
     double getDistinctVisitedAreas() {
         var dvaConfig = samovarConfig.getConfig("distinctVisitedAreasDistribution");
         return lognormalDistribution(dvaConfig.getDouble("avg"), dvaConfig.getDouble("std"));
     }
-
+    
     double getPersonalWeight() {
         var pwConfig = samovarConfig.getConfig("personalWeightDistribution");
         return zipfDistribution(pwConfig.getDouble("theta"));
@@ -145,5 +195,10 @@ public class SAMOVARModel implements BotModel {
     double zipfDistribution(double theta) {
         // TODO
         return 0.0;
+    }
+    
+    Graph<Waypoint> sampleWaypoint(int worldWidth, int worldLength, int waypointSize, int waypointNumber) {
+    	MutableGraph<Waypoint> map = GraphBuilder.undirected().build();
+    	return map;
     }
 }
