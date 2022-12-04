@@ -18,41 +18,45 @@
 
 package nl.tudelft.opencraft.yardstick.model;
 
-import java.awt.Point;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.google.common.graph.Graph;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
-import com.google.common.graph.Network;
 import com.typesafe.config.Config;
-
+import java.awt.Point;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import nl.tudelft.opencraft.yardstick.bot.Bot;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskExecutor;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskStatus;
+import nl.tudelft.opencraft.yardstick.model.SAMOVARModel.Waypoint;
 import nl.tudelft.opencraft.yardstick.util.Vector3i;
 
 /**
  * Represents the SAMOVAR model.
  */
 public class SAMOVARModel implements BotModel {
-	
-	class Waypoint extends Point{
-		final double weight;
-		final int level;
-		Waypoint(int x, int y, double weight, int level){
-			super(x, y);
-			this.weight = weight;
-			this.level = level;
-		}
-	}
-    private static Graph<Waypoint> map;
+
+    class Waypoint extends Point {
+
+        final double weight;
+        final int level;
+
+        Waypoint(int x, int y, double weight, int level) {
+            super(x, y);
+            this.weight = weight;
+            this.level = level;
+        }
+    }
+
+    private static MutableGraph<Waypoint> map;
+    private static HashMap<Integer, ArrayList<Waypoint>> leveledList;
+
     final Random rng = new Random(0);
     final Config samovarConfig;
     final int botsNumber;
@@ -70,7 +74,7 @@ public class SAMOVARModel implements BotModel {
     }
 
     void generateMap() {
-    	sampleWaypoint();
+        sampleWaypoint();
     }
 
     /**
@@ -99,7 +103,9 @@ public class SAMOVARModel implements BotModel {
             long duration = idleDuration;
 
             TaskStatus getCurrentStatus() {
-                return System.currentTimeMillis() - start >= duration ? TaskStatus.forSuccess() : TaskStatus.forInProgress();
+                return System.currentTimeMillis() - start >= duration
+                    ? TaskStatus.forSuccess()
+                    : TaskStatus.forInProgress();
             }
 
             @Override
@@ -142,48 +148,47 @@ public class SAMOVARModel implements BotModel {
         var apConfig = samovarConfig.getConfig("areaPopularityDistribution");
         return lognormalDistribution(apConfig.getDouble("avg"), apConfig.getDouble("std"));
     }
-    
+
     ArrayList<Double> getAreaPopularityList() {
-    	int waypointNumber = samovarConfig.getInt("waypointNumber");
-    	ArrayList<Double> areaPopularityList = new ArrayList<Double>();
-    	for(int i = 0; i < waypointNumber; i++) {
-    		areaPopularityList.add(getAreaPopularity());
-    	}
-    	Collections.sort(areaPopularityList);
-    	return areaPopularityList;
-    	
+        int waypointNumber = samovarConfig.getInt("waypointNumber");
+        ArrayList<Double> areaPopularityList = new ArrayList<Double>();
+        for (int i = 0; i < waypointNumber; i++) {
+            areaPopularityList.add(getAreaPopularity());
+        }
+        Collections.sort(areaPopularityList);
+        return areaPopularityList;
     }
-    
+
     ArrayList<Integer> getAreaLevelList(ArrayList<Double> areaPopularityList) throws Exception {
-    	int level = samovarConfig.getInt("levelNumber");
-    	int logBase = samovarConfig.getInt("levelLogBase");
-    	ArrayList<Integer> areaLevelList = new ArrayList<Integer>();
-    	int totalBin = 0;
-    	for (int i = 0; i < level; i++) {
-    		totalBin += Math.pow(logBase, i);
-    	}
-    	int binWidth = areaPopularityList.size()/totalBin;
-    	if (binWidth <= 0) {
-    		throw new Exception("The number of waypoints must be greater then binWidth");
-    	}
-    	
-    	int tempLevel = 1;
-    	int tempBinUpper = binWidth;
-    	for (int i = 1; i <= areaPopularityList.size(); i++) {
-    		if (i > tempBinUpper && tempLevel < level) {
-    			tempBinUpper += binWidth * Math.pow(logBase, tempLevel);
-    			tempLevel++; 
-    		}
-    		areaLevelList.add(tempLevel);
-    	}
-    	return areaLevelList;
+        int level = samovarConfig.getInt("levelNumber");
+        int logBase = samovarConfig.getInt("levelLogBase");
+        ArrayList<Integer> areaLevelList = new ArrayList<Integer>();
+        int totalBin = 0;
+        for (int i = 0; i < level; i++) {
+            totalBin += Math.pow(logBase, i);
+        }
+        int binWidth = areaPopularityList.size() / totalBin;
+        if (binWidth <= 0) {
+            throw new Exception("The number of waypoints must be greater then binWidth");
+        }
+
+        int tempLevel = 1;
+        int tempBinUpper = binWidth;
+        for (int i = 1; i <= areaPopularityList.size(); i++) {
+            if (i > tempBinUpper && tempLevel < level) {
+                tempBinUpper += binWidth * Math.pow(logBase, tempLevel);
+                tempLevel++;
+            }
+            areaLevelList.add(tempLevel);
+        }
+        return areaLevelList;
     }
 
     double getDistinctVisitedAreas() {
         var dvaConfig = samovarConfig.getConfig("distinctVisitedAreasDistribution");
         return lognormalDistribution(dvaConfig.getDouble("avg"), dvaConfig.getDouble("std"));
     }
-    
+
     double getPersonalWeight() {
         var pwConfig = samovarConfig.getConfig("personalWeightDistribution");
         return zipfDistribution(pwConfig.getDouble("theta"));
@@ -199,43 +204,111 @@ public class SAMOVARModel implements BotModel {
         // TODO
         return 0.0;
     }
-    
+
     Graph<Waypoint> sampleWaypoint() {
-    	int worldWidth = samovarConfig.getInt("worldWidth");
-    	int worldLength = samovarConfig.getInt("worldLength");
-    	int waypointSize = samovarConfig.getInt("waypointSize");
-    	int waypointNumber = samovarConfig.getInt("waypointNumber");
-    	MutableGraph<Waypoint> map = GraphBuilder.undirected().build();
-    	
-    	int numAreaX = (int) Math.ceil((double) worldWidth / waypointSize);
-    	int numAreaY = (int) Math.ceil((double) worldLength / waypointSize);
-    	
-    	int[] randomWaypsointIndex = new Random().ints(0, numAreaX*numAreaY).
-    			distinct().limit(waypointNumber).toArray();
-  	  	int[] randomPopularityIndex = new Random().ints(0, waypointNumber).
-  	  			distinct().limit(waypointNumber).toArray();
-    	ArrayList<Double> areaPopularityList = getAreaPopularityList();
-    	try {
-			ArrayList<Integer> areaLevelList = getAreaLevelList(areaPopularityList);
-	    	for (int i = 0; i < waypointNumber; i++) {
-	    		int indexX = randomWaypsointIndex[i]%numAreaX;
-	    		int indexY = randomWaypsointIndex[i]/numAreaX;
-	    		int x = indexX * waypointSize + 
-	    				(( indexX == numAreaX -1 && worldWidth % waypointSize != 0 )?
-	    						(worldWidth % waypointSize)/2:
-	    						waypointSize/2);
-	    		int y = indexY * waypointSize + 
-	    				(( indexY == numAreaY -1 && worldLength % waypointSize != 0 )?
-	    						(worldLength % waypointSize)/2:
-	    						waypointSize/2);
-	    		Waypoint waypoint = new Waypoint(x, y, 
-	    				areaPopularityList.get(randomPopularityIndex[i]),
-	    				areaLevelList.get(randomPopularityIndex[i]));
-	    		map.addNode(waypoint);
-	    	}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-    	return map;
+        int worldWidth = samovarConfig.getInt("worldWidth");
+        int worldLength = samovarConfig.getInt("worldLength");
+        int waypointSize = samovarConfig.getInt("waypointSize");
+        int waypointNumber = samovarConfig.getInt("waypointNumber");
+        map = GraphBuilder.undirected().build();
+        initLeveledList();
+
+        int numAreaX = (int) Math.ceil((double) worldWidth / waypointSize);
+        int numAreaY = (int) Math.ceil((double) worldLength / waypointSize);
+
+        int[] randomAreaIndex = new Random().ints(0, numAreaX * numAreaY).distinct().limit(waypointNumber).toArray();
+        int[] randomPopularityIndex = new Random().ints(0, waypointNumber).distinct().limit(waypointNumber).toArray();
+        ArrayList<Double> areaPopularityList = getAreaPopularityList();
+        try {
+            ArrayList<Integer> areaLevelList = getAreaLevelList(areaPopularityList);
+            for (int i = 0; i < waypointNumber; i++) {
+                int areaX = randomAreaIndex[i] % numAreaX;
+                int areaY = randomAreaIndex[i] / numAreaX;
+                int x =
+                    areaX *
+                    waypointSize +
+                    (
+                        (areaX == numAreaX - 1 && worldWidth % waypointSize != 0)
+                            ? (worldWidth % waypointSize) / 2
+                            : waypointSize / 2
+                    );
+                int y =
+                    areaY *
+                    waypointSize +
+                    (
+                        (areaY == numAreaY - 1 && worldLength % waypointSize != 0)
+                            ? (worldLength % waypointSize) / 2
+                            : waypointSize / 2
+                    );
+
+                Double popularity = areaPopularityList.get(randomPopularityIndex[i]);
+                int level = areaLevelList.get(randomPopularityIndex[i]);
+
+                Waypoint waypoint = new Waypoint(x, y, popularity, level);
+                leveledList.get(level).add(waypoint);
+                map.addNode(waypoint);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return map;
+    }
+
+    void initLeveledList() {
+        int level = samovarConfig.getInt("levelNumber");
+        HashMap<Integer, ArrayList<Waypoint>> leveledList = new HashMap<Integer, ArrayList<Waypoint>>();
+        for (int i = 1; i <= level; i++) {
+            leveledList.put(i, new ArrayList<Waypoint>());
+        }
+    }
+
+    void connectWaypoint() {
+        int levelNumber = samovarConfig.getInt("levelNumber");
+        int connectionRange = samovarConfig.getInt("connectionRange");
+        for (int level = 1; level <= levelNumber; level++) {
+            ArrayList<Waypoint> currentLvPointList = leveledList.get(level);
+            if (level == 1) {
+                for (int index1 = 0; index1 < currentLvPointList.size(); index1++) for (
+                    int index2 = index1 + 1;
+                    index2 < currentLvPointList.size();
+                    index2++
+                ) map.putEdge(currentLvPointList.get(index1), currentLvPointList.get(index2));
+            } else {
+                ArrayList<Waypoint> upLvList = leveledList.get(level - 1);
+                HashMap<Waypoint, ArrayList<Waypoint>> connectedUpList = new HashMap<Waypoint, ArrayList<Waypoint>>();
+                for (int index1 = 0; index1 < currentLvPointList.size(); index1++) {
+                    Waypoint currentPt = currentLvPointList.get(index1);
+                    double minDistance = Double.MAX_VALUE;
+                    int minIndex = 0;
+                    for (int index2 = 0; index2 < upLvList.size(); index2++) {
+                        double distance = currentPt.distance(upLvList.get(index2));
+                        if (minDistance > distance) {
+                            minDistance = distance;
+                            minIndex = index2;
+                        }
+                    }
+                    Waypoint connectedPt = upLvList.get(minIndex);
+                    map.putEdge(currentPt, connectedPt);
+
+                    if (!connectedUpList.containsKey(connectedPt)) connectedUpList.put(
+                        connectedPt,
+                        new ArrayList<Waypoint>()
+                    );
+                    ArrayList<Waypoint> sameLvConnected = connectedUpList.get(connectedPt);
+                    for (int i = 0; i < sameLvConnected.size(); i++) map.putEdge(currentPt, sameLvConnected.get(i));
+                    connectedUpList.get(connectedPt).add(currentPt);
+                }
+            }
+        }
+        Iterator<Waypoint> iter1 = map.nodes().iterator();
+        while (iter1.hasNext()) {
+            Waypoint pt1 = iter1.next();
+            Set<Waypoint> adjPt = map.adjacentNodes(pt1);
+            Iterator<Waypoint> iter2 = adjPt.iterator();
+            while (iter2.hasNext()) {
+                Waypoint pt2 = iter2.next();
+                if (pt1.distance(pt2) < connectionRange) map.putEdge(pt1, pt2);
+            }
+        }
     }
 }
