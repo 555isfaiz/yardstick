@@ -199,6 +199,24 @@ public class SAMOVARModel implements BotModel {
     
     Graph<Waypoint> sampleWaypoint(int worldWidth, int worldLength, int waypointSize, int waypointNumber) {
     	MutableGraph<Waypoint> map = GraphBuilder.undirected().build();
+    	int numAreaWidth = (int) Math.ceil((double) worldWidth / waypointSize);
+    	int numAreaLength = (int) Math.ceil((double) worldLength / waypointSize);
+    	int[] indexWaypoint = new Random().ints(0, numAreaLength*numAreaWidth).
+    			distinct().limit(waypointNumber).toArray();
+    	ArrayList<Double> areaPopularityList = getAreaPopularityList(waypointNumber);
+    	try {
+			ArrayList<Integer> areaLevelList = getAreaLevelList(areaPopularityList, 2, 10);
+	    	for (int i = 0; i < indexWaypoint.length; i++) {
+	    		int indexX = indexWaypoint[i]%numAreaWidth;
+	    		int indexY = indexWaypoint[i]/numAreaWidth;
+	    		int x = indexX * 10;
+	    		Waypoint waypoint = new Waypoint(1, 2, 
+	    				areaPopularityList.get(indexWaypoint[i]) ,areaLevelList.get(indexWaypoint[i]));
+	    		map.addNode(waypoint);
+	    	}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
     	return map;
     }
 }
