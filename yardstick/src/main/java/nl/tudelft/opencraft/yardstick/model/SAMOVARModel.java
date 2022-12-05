@@ -22,7 +22,6 @@ import com.google.common.graph.Graph;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
 import com.typesafe.config.Config;
-import java.awt.Point;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -34,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import nl.tudelft.opencraft.yardstick.bot.Bot;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskExecutor;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskStatus;
-import nl.tudelft.opencraft.yardstick.model.SAMOVARModel.Waypoint;
+import nl.tudelft.opencraft.yardstick.util.Vector2i;
 import nl.tudelft.opencraft.yardstick.util.Vector3i;
 
 /**
@@ -42,13 +41,13 @@ import nl.tudelft.opencraft.yardstick.util.Vector3i;
  */
 public class SAMOVARModel implements BotModel {
 
-    class Waypoint extends Point {
+    class Waypoint extends Vector2i {
 
         final double weight;
         final int level;
 
-        Waypoint(int x, int y, double weight, int level) {
-            super(x, y);
+        Waypoint(int x, int z, double weight, int level) {
+            super(x, z);
             this.weight = weight;
             this.level = level;
         }
@@ -214,16 +213,16 @@ public class SAMOVARModel implements BotModel {
         initLeveledList();
 
         int numAreaX = (int) Math.ceil((double) worldWidth / waypointSize);
-        int numAreaY = (int) Math.ceil((double) worldLength / waypointSize);
+        int numAreaZ = (int) Math.ceil((double) worldLength / waypointSize);
 
-        int[] randomAreaIndex = new Random().ints(0, numAreaX * numAreaY).distinct().limit(waypointNumber).toArray();
+        int[] randomAreaIndex = new Random().ints(0, numAreaX * numAreaZ).distinct().limit(waypointNumber).toArray();
         int[] randomPopularityIndex = new Random().ints(0, waypointNumber).distinct().limit(waypointNumber).toArray();
         ArrayList<Double> areaPopularityList = getAreaPopularityList();
         try {
             ArrayList<Integer> areaLevelList = getAreaLevelList(areaPopularityList);
             for (int i = 0; i < waypointNumber; i++) {
                 int areaX = randomAreaIndex[i] % numAreaX;
-                int areaY = randomAreaIndex[i] / numAreaX;
+                int areaZ = randomAreaIndex[i] / numAreaX;
                 int x =
                     areaX *
                     waypointSize +
@@ -232,11 +231,11 @@ public class SAMOVARModel implements BotModel {
                             ? (worldWidth % waypointSize) / 2
                             : waypointSize / 2
                     );
-                int y =
-                    areaY *
+                int z =
+                    areaZ *
                     waypointSize +
                     (
-                        (areaY == numAreaY - 1 && worldLength % waypointSize != 0)
+                        (areaZ == numAreaZ - 1 && worldLength % waypointSize != 0)
                             ? (worldLength % waypointSize) / 2
                             : waypointSize / 2
                     );
@@ -244,7 +243,7 @@ public class SAMOVARModel implements BotModel {
                 Double popularity = areaPopularityList.get(randomPopularityIndex[i]);
                 int level = areaLevelList.get(randomPopularityIndex[i]);
 
-                Waypoint waypoint = new Waypoint(x, y, popularity, level);
+                Waypoint waypoint = new Waypoint(x, z, popularity, level);
                 leveledList.get(level).add(waypoint);
                 map.addNode(waypoint);
             }
