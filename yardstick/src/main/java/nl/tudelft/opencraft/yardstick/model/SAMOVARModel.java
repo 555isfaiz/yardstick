@@ -23,19 +23,21 @@ import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
 import com.typesafe.config.Config;
 import java.awt.Point;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 import nl.tudelft.opencraft.yardstick.bot.Bot;
+import nl.tudelft.opencraft.yardstick.bot.BotManager;
+import nl.tudelft.opencraft.yardstick.bot.ai.pathfinding.PathNode;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskExecutor;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.TaskStatus;
+import nl.tudelft.opencraft.yardstick.bot.world.*;
 import nl.tudelft.opencraft.yardstick.model.SAMOVARModel.Waypoint;
+import nl.tudelft.opencraft.yardstick.util.Vector3d;
 import nl.tudelft.opencraft.yardstick.util.Vector3i;
+import science.atlarge.opencraft.mcprotocollib.data.game.world.WorldType;
 
 /**
  * Represents the SAMOVAR model.
@@ -52,10 +54,21 @@ public class SAMOVARModel implements BotModel {
             this.weight = weight;
             this.level = level;
         }
+
+        Vector3d convertToVector3d(World world) throws ChunkNotLoadedException {
+            Block block  = world.getHighestBlockAt(this.x, this.y);
+            return block.getLocation().doubleVector();
+        }
+
+        Vector3i convertToVector3i(World world) throws ChunkNotLoadedException {
+            Block block  = world.getHighestBlockAt(this.x, this.y);
+            return block.getLocation();
+        }
     }
 
     private static MutableGraph<Waypoint> map;
     private static HashMap<Integer, ArrayList<Waypoint>> leveledList;
+    private final Map<String, PathNode> paths = new ConcurrentHashMap<>();
 
     final Random rng = new Random(0);
     final Config samovarConfig;
@@ -70,7 +83,6 @@ public class SAMOVARModel implements BotModel {
 
     public void onBefore() {
         generateMap();
-        generatePath(botsNumber);
     }
 
     void generateMap() {
@@ -80,13 +92,17 @@ public class SAMOVARModel implements BotModel {
     /**
      * Generate {@code pathNum} paths, they are not assigned to bots yet.
      */
-    void generatePath(int pathNum) {
-        // TODO
+    public void generatePath(BotManager botManager) {
+        botManager.getConnectedBots()
+                .stream()
+                .filter(it -> !paths.containsKey(it.getName()))
+                .forEach(this::makePathForBot);
     }
 
     // Do all the updates as the paper descirbes here.
     @Override
     public TaskExecutor newTask(Bot bot) {
+        // TODO take path from paths by bot name with idle time
         if (assignedPath.containsKey(bot.getName())) {
             // ...
         } else {
@@ -131,6 +147,60 @@ public class SAMOVARModel implements BotModel {
     public Vector3i nextTargetLocation(Bot bot) {
         // TODO
         return null;
+    }
+
+    private void makePathForBot(Bot bot) {
+        int k = getDistinctVisitedAreas();
+
+        Waypoint currentWaypoint = replaceBotToStartPosition(bot);
+        PathNode startPathNode = new PathNode(bot.getPlayer().getLocation().intVector());
+        PathNode currentPathNode = startPathNode;
+        Vector3i currentVector3i = currentPathNode.getLocation();
+
+        int pathSize = 1;
+        boolean isAdded = true;
+        while(pathSize != k && isAdded) {
+            isAdded = false;
+            for (Waypoint node: map.adjacentNodes(currentWaypoint)) {
+                try {
+                    Vector3i targetVector3i = node.convertToVector3i(bot.getWorld());
+                    PathNode futurePathNode = bot.getPathFinder().search(currentVector3i, targetVector3i);
+
+                    currentPathNode.setNext(futurePathNode);
+                    futurePathNode.setPrevious(currentPathNode);
+                    currentPathNode = futurePathNode;
+
+                    currentWaypoint = node;
+                    isAdded = true;
+                    break;
+                } catch (Exception exception) {}
+            }
+        }
+
+        paths.put(bot.getName(), startPathNode);
+    }
+
+    private Waypoint replaceBotToStartPosition(Bot bot) {
+        Waypoint startWayPoint = null;
+        if (samovarConfig.getString("startWaypointStrategy").equals("SAMOVAR-U")) {
+            int size = map.nodes().size();
+            int item = new Random().nextInt(size);
+            int i = 0;
+            for(Waypoint node: map.nodes())
+            {
+                if (i == item)
+                    startWayPoint = node;
+                i++;
+            }
+        } else {
+            startWayPoint = new Waypoint(1,2,3,5);
+        }
+        try {
+            bot.getController().updateLocation(startWayPoint.convertToVector3d(bot.getWorld()));
+        } catch (ChunkNotLoadedException chunkNotLoadedException) {
+
+        }
+        return startWayPoint;
     }
 
     // TODO what's the unit?
@@ -184,9 +254,9 @@ public class SAMOVARModel implements BotModel {
         return areaLevelList;
     }
 
-    double getDistinctVisitedAreas() {
+    int getDistinctVisitedAreas() {
         var dvaConfig = samovarConfig.getConfig("distinctVisitedAreasDistribution");
-        return lognormalDistribution(dvaConfig.getDouble("avg"), dvaConfig.getDouble("std"));
+        return (int) lognormalDistribution(dvaConfig.getDouble("avg"), dvaConfig.getDouble("std"));
     }
 
     double getPersonalWeight() {
@@ -206,6 +276,7 @@ public class SAMOVARModel implements BotModel {
     }
 
     Graph<Waypoint> sampleWaypoint() {
+        System.out.println(samovarConfig);
         int worldWidth = samovarConfig.getInt("worldWidth");
         int worldLength = samovarConfig.getInt("worldLength");
         int waypointSize = samovarConfig.getInt("waypointSize");
