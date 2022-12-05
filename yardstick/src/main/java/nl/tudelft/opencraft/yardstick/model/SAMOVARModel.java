@@ -154,7 +154,8 @@ public class SAMOVARModel implements BotModel {
             isAdded = false;
             for (Waypoint node: map.adjacentNodes(currentWaypoint)) {
                 try {
-                    Vector3i targetVector3i = node.convertToVector3i(bot.getWorld());
+
+                    Vector3i targetVector3i = node.getHighestWalkTarget(bot.getWorld());
                     PathNode futurePathNode = bot.getPathFinder().search(currentVector3i, targetVector3i);
 
                     currentPathNode.setNext(futurePathNode);
@@ -187,7 +188,8 @@ public class SAMOVARModel implements BotModel {
             startWayPoint = new Waypoint(1,2,3,5);
         }
         try {
-            bot.getController().updateLocation(startWayPoint.convertToVector3d(bot.getWorld()));
+
+            bot.getController().updateLocation(startWayPoint.getHighestWalkTarget(bot.getWorld()).doubleVector());
         } catch (ChunkNotLoadedException chunkNotLoadedException) {
 
         }
