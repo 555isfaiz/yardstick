@@ -42,4 +42,15 @@ public class Vector2i {
     public int getZ() {
         return z;
     }
+
+    public double distance(Vector2i a) {
+        return Math.sqrt(distanceSquared(a));
+    }
+
+    public double distanceSquared(Vector2i a) {
+        double dx = x - a.x;
+        double dz = z - a.z;
+
+        return dx * dx + dz * dz;
+    }
 }
