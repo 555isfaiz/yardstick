@@ -49,7 +49,7 @@ public class Experiment13SAMOVAR extends Experiment {
         super(13, nodeID, game, "latency and walk experiment with SAMOVAR model");
         this.behaviorConfig = behaviorConfig;
     }
-    
+
     @Override
     protected void before() {
         this.experimentDuration = behaviorConfig.getDuration("duration");
@@ -58,9 +58,9 @@ public class Experiment13SAMOVAR extends Experiment {
         Duration timeBetweenJoins = behaviorConfig.getDuration("joininterval");
         int numberOfBotsPerJoin = behaviorConfig.getInt("numbotsperjoin");
         this.startMillis = System.currentTimeMillis();
-        
+
         samovar.onBefore();
-        
+
         botManager = new BotManager(game);
         botManager.setPlayerStepIncrease(numberOfBotsPerJoin);
         botManager.setPlayerCountTarget(botsTotal);
@@ -68,8 +68,10 @@ public class Experiment13SAMOVAR extends Experiment {
                 TimeUnit.SECONDS);
     }
 
+
     @Override
     protected void tick() {
+        samovar.generatePath(botManager);
         botManager.getConnectedBots().stream()
                 .filter(Bot::isJoined)
                 .forEach(this::botTick);
