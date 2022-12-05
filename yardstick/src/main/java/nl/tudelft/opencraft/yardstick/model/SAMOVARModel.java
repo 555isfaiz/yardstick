@@ -255,7 +255,7 @@ public class SAMOVARModel implements BotModel {
 
 	void initLeveledList() {
         int level = samovarConfig.getInt("levelNumber");
-        HashMap<Integer, ArrayList<Waypoint>> leveledList = new HashMap<Integer, ArrayList<Waypoint>>();
+        leveledList = new HashMap<Integer, ArrayList<Waypoint>>();
         for (int i = 1; i <= level; i++) {
             leveledList.put(i, new ArrayList<Waypoint>());
         }
