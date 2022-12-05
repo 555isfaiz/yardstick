@@ -69,6 +69,7 @@ public class SAMOVARModel implements BotModel {
 
     void generateMap() {
         sampleWaypoint();
+        connectWaypoint();
     }
 
     /**
@@ -365,11 +366,10 @@ public class SAMOVARModel implements BotModel {
         Iterator<Waypoint> iter1 = map.nodes().iterator();
         while (iter1.hasNext()) {
             Waypoint pt1 = iter1.next();
-            Set<Waypoint> adjPt = map.adjacentNodes(pt1);
-            Iterator<Waypoint> iter2 = adjPt.iterator();
+            Iterator<Waypoint> iter2 = map.nodes().iterator();
             while (iter2.hasNext()) {
                 Waypoint pt2 = iter2.next();
-                if (pt1.distance(pt2) < connectionRange) map.putEdge(pt1, pt2);
+                if (pt1.distance(pt2) < connectionRange && !pt1.equals(pt2)) map.putEdge(pt1, pt2);
             }
         }
     }
