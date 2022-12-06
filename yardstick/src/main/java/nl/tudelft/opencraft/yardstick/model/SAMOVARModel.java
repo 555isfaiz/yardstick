@@ -56,6 +56,7 @@ public class SAMOVARModel implements BotModel {
 
     private static MutableGraph<Waypoint> map;
     private static HashMap<Integer, ArrayList<Waypoint>> leveledList;
+    private final List<SamovarMetaData> unsignedPaths = Collections.synchronizedList(new ArrayList<>());
     private final Map<String, SamovarMetaData> paths = new ConcurrentHashMap<>();
 
     //private final Map<String, List<Waypoint>> paths = new ConcurrentHashMap<>();
@@ -71,6 +72,7 @@ public class SAMOVARModel implements BotModel {
 
     public void onBefore() {
         generateMap();
+        generatePath();
     }
 
     void generateMap() {
@@ -78,25 +80,28 @@ public class SAMOVARModel implements BotModel {
         connectWaypoint();
     }
 
+    void generatePath() {
+        for (int i = 0; i < this.botsNumber; i++) {
+            makePathForBot();
+        }
+    }
+
     /**
      * Generate {@code pathNum} paths, they are not assigned to bots yet.
      */
-    public void generatePath(BotManager botManager) {
-        botManager.getConnectedBots()
-                .stream()
-                .filter(it -> !paths.containsKey(it.getName()))
-                .forEach(this::makePathForBot);
-    }
 
     @Override
     public TaskExecutor newTask(Bot bot) {
+        if (!paths.containsKey(bot.getName())) {
+            paths.put(bot.getName(), unsignedPaths.remove(0));
+        }
         var policy = new RetryPolicy<>()
                 .withMaxAttempts(-1)
                 .withBackoff(1, 16, ChronoUnit.SECONDS);
         if(this.paths.get(bot.getName()).getWasInStartedWayPoint().compareAndSet(false,true)) {
             System.out.println("Bot is going to start waypoint");
             Waypoint startWayPoint = this.paths.get(bot.getName()).getStartWayPoint();
-            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> new WalkTaskExecutor(bot, startWayPoint.getHighestWalkTarget(bot.getWorld()))));
+            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, startWayPoint.getHighestWalkTarget(bot.getWorld()))));
         }
         if (paths.get(bot.getName()).getWasIdleTime().compareAndSet(false, true)) {
             long idleDuration = getPauseDuration();
@@ -119,7 +124,7 @@ public class SAMOVARModel implements BotModel {
         Waypoint nextWaypoint = getNextWayPointByWeight(waypoints);
         waypoints.put(botWayPoint.getKey(), botWayPoint.getValue());
         System.out.println("Bot is going to next waypoint");
-        var future = Failsafe.with(policy).getAsync(() -> new WalkTaskExecutor(bot, nextWaypoint.getHighestWalkTarget(bot.getWorld())));
+        var future = Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, nextWaypoint.getHighestWalkTarget(bot.getWorld())));
         return new FutureTaskExecutor(future);
     }
 
@@ -175,7 +180,7 @@ public class SAMOVARModel implements BotModel {
         return null;
     }
 
-    private void makePathForBot(Bot bot) {
+    private void makePathForBot() {
         Waypoint startWayPoint = getStartWaypoint();
         int realCapacity = 1;
         int k = getDistinctVisitedAreas();
@@ -193,7 +198,7 @@ public class SAMOVARModel implements BotModel {
             // TODO how to get next?
         }
         SamovarMetaData samovarMetaData = new SamovarMetaData(startWayPoint, waypoints);
-        paths.put(bot.getName(), samovarMetaData);
+        unsignedPaths.add(samovarMetaData);
     }
 
     private Waypoint getStartWaypoint() {
