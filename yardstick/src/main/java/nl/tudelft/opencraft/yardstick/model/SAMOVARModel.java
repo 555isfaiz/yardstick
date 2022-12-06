@@ -101,7 +101,7 @@ public class SAMOVARModel implements BotModel {
             return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, startWayPoint.getHighestWalkTarget(bot.getWorld()))));
         }
         if (paths.get(bot.getName()).getWasIdleTime().compareAndSet(false, true)) {
-            long idleDuration = getPauseDuration();
+            long idleDuration = 1000 * getPauseDuration();
             return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> stayIdle(idleDuration)));
         }
         paths.get(bot.getName()).getWasIdleTime().set(false);
@@ -117,9 +117,15 @@ public class SAMOVARModel implements BotModel {
                 chunkNotLoadedException.printStackTrace();
             }
         }
-        waypoints.remove(botWayPoint.getKey());
+        // if the world is small, there is a chance that bot wasn't able to reach previous waypoint
+        if (botWayPoint != null) {
+            waypoints.remove(botWayPoint.getKey());
+        }
         Waypoint nextWaypoint = getNextWayPointByWeight(waypoints);
-        waypoints.put(botWayPoint.getKey(), botWayPoint.getValue());
+        // if the world is small, there is a chance that bot wasn't able to reach previous waypoint
+        if (botWayPoint != null) {
+            waypoints.put(botWayPoint.getKey(), botWayPoint.getValue());
+        }
         System.out.println("Bot is going to next waypoint");
         var future = Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, nextWaypoint.getHighestWalkTarget(bot.getWorld())));
         return new FutureTaskExecutor(future);
