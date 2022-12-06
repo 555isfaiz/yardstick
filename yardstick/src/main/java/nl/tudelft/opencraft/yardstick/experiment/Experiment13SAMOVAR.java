@@ -37,7 +37,6 @@ import nl.tudelft.opencraft.yardstick.model.SAMOVARModel;
 public class Experiment13SAMOVAR extends Experiment {
 
     private final Config behaviorConfig;
-    private final Config samovarConfig;
 
     private SAMOVARModel samovar;
 
@@ -46,23 +45,22 @@ public class Experiment13SAMOVAR extends Experiment {
     private BotManager botManager;
     private ScheduledFuture<?> runningBotManager;
 
-    public Experiment13SAMOVAR(int nodeID, GameArchitecture game, Config behaviorConfig, Config samovarConfig, Duration experimentDuration) {
+    public Experiment13SAMOVAR(int nodeID, GameArchitecture game, Config behaviorConfig) {
         super(13, nodeID, game, "latency and walk experiment with SAMOVAR model");
         this.behaviorConfig = behaviorConfig;
-        this.samovarConfig = samovarConfig;
     }
-    
+
     @Override
     protected void before() {
         this.experimentDuration = behaviorConfig.getDuration("duration");
         int botsTotal = behaviorConfig.getInt("bots");
-        this.samovar = new SAMOVARModel(samovarConfig, botsTotal);
+        this.samovar = new SAMOVARModel(behaviorConfig, botsTotal);
         Duration timeBetweenJoins = behaviorConfig.getDuration("joininterval");
         int numberOfBotsPerJoin = behaviorConfig.getInt("numbotsperjoin");
         this.startMillis = System.currentTimeMillis();
-        
+
         samovar.onBefore();
-        
+
         botManager = new BotManager(game);
         botManager.setPlayerStepIncrease(numberOfBotsPerJoin);
         botManager.setPlayerCountTarget(botsTotal);
@@ -70,11 +68,16 @@ public class Experiment13SAMOVAR extends Experiment {
                 TimeUnit.SECONDS);
     }
 
+
     @Override
     protected void tick() {
+        //samovar.generatePath(botManager);
         botManager.getConnectedBots().stream()
                 .filter(Bot::isJoined)
-                .forEach(this::botTick);
+                .forEach(it -> {
+                    samovar.generatePath(botManager);
+                    botTick(it);
+                });
     }
 
     private void botTick(Bot bot) {
