@@ -21,33 +21,21 @@ package nl.tudelft.opencraft.yardstick.model;
 import com.google.common.graph.Graph;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
-import com.google.gson.stream.JsonToken;
 import com.typesafe.config.Config;
-import java.awt.Point;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
-import lombok.SneakyThrows;
 import net.jodah.failsafe.Failsafe;
 import net.jodah.failsafe.RetryPolicy;
 import nl.tudelft.opencraft.yardstick.bot.Bot;
-import nl.tudelft.opencraft.yardstick.bot.BotManager;
-import nl.tudelft.opencraft.yardstick.bot.ai.pathfinding.PathNode;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.*;
 import nl.tudelft.opencraft.yardstick.bot.entity.SamovarMetaData;
-import nl.tudelft.opencraft.yardstick.util.Report;
-import nl.tudelft.opencraft.yardstick.util.Vector2i;
 import nl.tudelft.opencraft.yardstick.bot.world.*;
-import nl.tudelft.opencraft.yardstick.util.Vector3d;
 import nl.tudelft.opencraft.yardstick.util.Vector3i;
 import org.apache.commons.math3.distribution.ZipfDistribution;
-import org.w3c.dom.ranges.Range;
-import science.atlarge.opencraft.mcprotocollib.data.game.world.WorldType;
 
 /**
  * Represents the SAMOVAR model.
@@ -58,6 +46,7 @@ public class SAMOVARModel implements BotModel {
     private static HashMap<Integer, ArrayList<Waypoint>> leveledList;
     private final List<SamovarMetaData> unsignedPaths = Collections.synchronizedList(new ArrayList<>());
     private final Map<String, SamovarMetaData> paths = new ConcurrentHashMap<>();
+    private AtomicBoolean isCorrected = new AtomicBoolean(false);
 
     //private final Map<String, List<Waypoint>> paths = new ConcurrentHashMap<>();
 
@@ -93,6 +82,14 @@ public class SAMOVARModel implements BotModel {
     @Override
     public TaskExecutor newTask(Bot bot) {
         if (!paths.containsKey(bot.getName())) {
+            if (isCorrected.compareAndSet(false, true)) {
+                map.nodes().forEach(it -> {
+                    // TODO bot.getWorld().getSpawnPoint() == null why???
+                    var spawnPoint = bot.getPlayer().getLocation().intVector();
+                    it.setX(it.getX() + spawnPoint.getX());
+                    it.setZ(it.getZ() + spawnPoint.getZ());
+                });
+            }
             paths.put(bot.getName(), unsignedPaths.remove(0));
         }
         var policy = new RetryPolicy<>()
