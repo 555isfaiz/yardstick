@@ -71,10 +71,13 @@ public class Experiment13SAMOVAR extends Experiment {
 
     @Override
     protected void tick() {
-        samovar.generatePath(botManager);
+        //samovar.generatePath(botManager);
         botManager.getConnectedBots().stream()
                 .filter(Bot::isJoined)
-                .forEach(this::botTick);
+                .forEach(it -> {
+                    samovar.generatePath(botManager);
+                    botTick(it);
+                });
     }
 
     private void botTick(Bot bot) {

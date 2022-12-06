@@ -59,7 +59,7 @@ import java.util.concurrent.Future;
 public class WalkTaskExecutor extends AbstractTaskExecutor {
 
     private static double speed = 0.15, jumpFactor = 3, fallFactor = 4, liquidFactor = 0.5;
-    private static int defaultTimeout = 6000;
+    private static int defaultTimeout = 60000;
 
     private final Vector3i target;
 

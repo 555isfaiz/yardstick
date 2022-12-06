@@ -21,26 +21,32 @@ package nl.tudelft.opencraft.yardstick.model;
 import com.google.common.graph.Graph;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
+import com.google.gson.stream.JsonToken;
 import com.typesafe.config.Config;
 import java.awt.Point;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import lombok.SneakyThrows;
 import net.jodah.failsafe.Failsafe;
 import net.jodah.failsafe.RetryPolicy;
 import nl.tudelft.opencraft.yardstick.bot.Bot;
 import nl.tudelft.opencraft.yardstick.bot.BotManager;
 import nl.tudelft.opencraft.yardstick.bot.ai.pathfinding.PathNode;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.*;
+import nl.tudelft.opencraft.yardstick.bot.entity.SamovarMetaData;
+import nl.tudelft.opencraft.yardstick.util.Report;
 import nl.tudelft.opencraft.yardstick.util.Vector2i;
 import nl.tudelft.opencraft.yardstick.bot.world.*;
 import nl.tudelft.opencraft.yardstick.util.Vector3d;
 import nl.tudelft.opencraft.yardstick.util.Vector3i;
 import org.apache.commons.math3.distribution.ZipfDistribution;
+import org.w3c.dom.ranges.Range;
 import science.atlarge.opencraft.mcprotocollib.data.game.world.WorldType;
 
 /**
@@ -50,8 +56,8 @@ public class SAMOVARModel implements BotModel {
 
     private static MutableGraph<Waypoint> map;
     private static HashMap<Integer, ArrayList<Waypoint>> leveledList;
-    private final Map<String, PathNode> paths = new ConcurrentHashMap<>();
-    private Map<Vector3i, Long> waypoints = new ConcurrentHashMap<>();
+    private final Map<String, SamovarMetaData> paths = new ConcurrentHashMap<>();
+
     //private final Map<String, List<Waypoint>> paths = new ConcurrentHashMap<>();
 
     final Random rng = new Random(0);
@@ -69,6 +75,7 @@ public class SAMOVARModel implements BotModel {
 
     void generateMap() {
         sampleWaypoint();
+        connectWaypoint();
     }
 
     /**
@@ -83,23 +90,53 @@ public class SAMOVARModel implements BotModel {
 
     @Override
     public TaskExecutor newTask(Bot bot) {
-
         var policy = new RetryPolicy<>()
                 .withMaxAttempts(-1)
                 .withBackoff(1, 16, ChronoUnit.SECONDS);
-
-        PathNode startPathNode = paths.get(bot.getName());
-
-        CompletableFuture<? extends AbstractTaskExecutor> future;
-
-        // go to initial position to make our way again
-        // TODO make sure that path exist
-        if (bot.getPlayer().getLocation().intVector() != startPathNode.getLocation()) {
-            future = Failsafe.with(policy).getAsync(() -> new WalkTaskExecutor(bot, startPathNode.getLocation()));
-        } else {
-            future = Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, startPathNode, waypoints));
+        if(this.paths.get(bot.getName()).getWasInStartedWayPoint().compareAndSet(false,true)) {
+            System.out.println("Bot is going to start waypoint");
+            Waypoint startWayPoint = this.paths.get(bot.getName()).getStartWayPoint();
+            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> new WalkTaskExecutor(bot, startWayPoint.getHighestWalkTarget(bot.getWorld()))));
         }
+        if (paths.get(bot.getName()).getWasIdleTime().compareAndSet(false, true)) {
+            long idleDuration = getPauseDuration();
+            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> stayIdle(idleDuration)));
+        }
+        paths.get(bot.getName()).getWasIdleTime().set(false);
+        Map<Waypoint, Double> waypoints = paths.get(bot.getName()).getWaypoints();
+        Map.Entry<Waypoint, Double> botWayPoint = null;
+        for (Map.Entry<Waypoint, Double> entry: waypoints.entrySet()) {
+            try {
+                if (entry.getKey().getHighestWalkTarget(bot.getWorld()).equals(bot.getPlayer().getLocation().intVector())) {
+                    botWayPoint = entry;
+                    break;
+                }
+            } catch (ChunkNotLoadedException chunkNotLoadedException) {
+                chunkNotLoadedException.printStackTrace();
+            }
+        }
+        waypoints.remove(botWayPoint.getKey());
+        Waypoint nextWaypoint = getNextWayPointByWeight(waypoints);
+        waypoints.put(botWayPoint.getKey(), botWayPoint.getValue());
+        System.out.println("Bot is going to next waypoint");
+        var future = Failsafe.with(policy).getAsync(() -> new WalkTaskExecutor(bot, nextWaypoint.getHighestWalkTarget(bot.getWorld())));
         return new FutureTaskExecutor(future);
+    }
+
+    private Waypoint getNextWayPointByWeight(Map<Waypoint, Double> waypoints) {
+        System.out.println("Trying to find next Waypoint according to weight");
+        List<Double> weights = new ArrayList<>(waypoints.values());
+        double sum = weights.stream().reduce(0.0, Double::sum);
+        double randomValue = sum * (new Random(System.currentTimeMillis())).nextDouble();
+        double prev = 0.0;
+        for (Map.Entry<Waypoint, Double> entry: waypoints.entrySet()) {
+            if (prev + entry.getValue() > randomValue)
+                return entry.getKey();
+            else
+                prev += entry.getValue();
+        }
+        System.out.println("Something went wrong, nothing was found...");
+        return null;
     }
 
     TaskExecutor stayIdle(long idleDuration) {
@@ -139,66 +176,48 @@ public class SAMOVARModel implements BotModel {
     }
 
     private void makePathForBot(Bot bot) {
+        Waypoint startWayPoint = getStartWaypoint();
+        int realCapacity = 1;
         int k = getDistinctVisitedAreas();
-
-        Waypoint currentWaypoint = replaceBotToStartPosition(bot);
-        PathNode startPathNode = new PathNode(bot.getPlayer().getLocation().intVector());
-        PathNode currentPathNode = startPathNode;
-        Vector3i currentVector3i = currentPathNode.getLocation();
-
-        try {
-            waypoints.put(currentWaypoint.getHighestWalkTarget(bot.getWorld()), getPersonalWeight());
-        } catch (ChunkNotLoadedException chunkNotLoadedException) {}
-
-        int pathSize = 1;
-        boolean isAdded = true;
-        while(pathSize != k && isAdded) {
-            isAdded = false;
-            for (Waypoint node: map.adjacentNodes(currentWaypoint)) { // check not already exist
-                try {
-                    Vector3i targetVector3i = node.getHighestWalkTarget(bot.getWorld());
-                    PathNode futurePathNode = bot.getPathFinder().search(currentVector3i, targetVector3i);
-
-                    currentPathNode.setNext(futurePathNode);
-                    futurePathNode.setPrevious(currentPathNode);
-                    currentPathNode = futurePathNode;
-
-                    waypoints.put(node.getHighestWalkTarget(bot.getWorld()), getPersonalWeight());
-                    currentWaypoint = node;
-                    isAdded = true;
-                    break;
-                } catch (Exception exception) {}
-            }
+        Map<Waypoint, Double> waypoints = new HashMap<>(k);
+        waypoints.put(startWayPoint, getPersonalWeight(k));
+        Waypoint tmp = startWayPoint;
+        while(realCapacity < k) {
+            var newWp = map.adjacentNodes(tmp)
+                    .stream()
+                    .filter(it -> !waypoints.containsKey(it)).limit(k - realCapacity)
+                    .limit(k - realCapacity)
+                    .collect(Collectors.toSet());
+            realCapacity+=newWp.size();
+            newWp.forEach(it -> waypoints.put(it, getPersonalWeight(k)));
+            // TODO how to get next?
         }
-        paths.put(bot.getName(), startPathNode);
+        SamovarMetaData samovarMetaData = new SamovarMetaData(startWayPoint, waypoints);
+        paths.put(bot.getName(), samovarMetaData);
     }
 
-    private Waypoint replaceBotToStartPosition(Bot bot) {
+    private Waypoint getStartWaypoint() {
         Waypoint startWayPoint = null;
         if (samovarConfig.getString("startWaypointStrategy").equals("SAMOVAR-U")) {
-            int size = map.nodes().size();
-            int item = new Random().nextInt(size);
+            int item = new Random().nextInt(map.nodes().size());
             int i = 0;
             for(Waypoint node: map.nodes())
             {
-                if (i == item)
+                if (i == item) {
                     startWayPoint = node;
+                    break;
+                }
                 i++;
             }
         } else {
-            // TODO handle this part of condition
-            startWayPoint = new Waypoint(1,2,3,5);
+            startWayPoint = Collections.max(map.nodes(), (o1, o2) -> (int) (o1.getWeight() - o2.getWeight()));
         }
-        try {
-            bot.getController().updateLocation(startWayPoint.getHighestWalkTarget(bot.getWorld()).doubleVector());
-        } catch (ChunkNotLoadedException chunkNotLoadedException) {}
         return startWayPoint;
     }
 
-    // TODO what's the unit?
-    double getPauseDuration() {
+    long getPauseDuration() {
         var dpConfig = samovarConfig.getConfig("pauseDurationDistribution");
-        return lognormalDistribution(dpConfig.getDouble("avg"), dpConfig.getDouble("std"));
+        return (long) lognormalDistribution(dpConfig.getDouble("avg"), dpConfig.getDouble("std"));
     }
 
     double getVelocity() {
@@ -251,9 +270,9 @@ public class SAMOVARModel implements BotModel {
         return (int) lognormalDistribution(dvaConfig.getDouble("avg"), dvaConfig.getDouble("std"));
     }
 
-    long getPersonalWeight() {
+    double getPersonalWeight(int size) {
         var pwConfig = samovarConfig.getConfig("personalWeightDistribution");
-        return (long) zipfDistribution(this.botsNumber, pwConfig.getDouble("theta"));
+        return zipfDistribution(size, pwConfig.getDouble("theta"));
     }
 
     // https://stackoverflow.com/questions/21674599/generating-a-lognormal-distribution-from-an-array-in-java
@@ -264,7 +283,7 @@ public class SAMOVARModel implements BotModel {
     // https://diveintodata.org/2009/09/13/zipf-distribution-generator-in-java/
     double zipfDistribution(int size, double theta) {
         ZipfDistribution zipfDistribution = new ZipfDistribution(size, theta);
-        return zipfDistribution.probability((new Random()).nextInt(20));
+        return zipfDistribution.probability(1 + (new Random()).nextInt(size));
     }
 
     Graph<Waypoint> sampleWaypoint() {
@@ -365,11 +384,10 @@ public class SAMOVARModel implements BotModel {
         Iterator<Waypoint> iter1 = map.nodes().iterator();
         while (iter1.hasNext()) {
             Waypoint pt1 = iter1.next();
-            Set<Waypoint> adjPt = map.adjacentNodes(pt1);
-            Iterator<Waypoint> iter2 = adjPt.iterator();
+            Iterator<Waypoint> iter2 = map.nodes().iterator();
             while (iter2.hasNext()) {
                 Waypoint pt2 = iter2.next();
-                if (pt1.distance(pt2) < connectionRange) map.putEdge(pt1, pt2);
+                if (pt1.distance(pt2) < connectionRange && !pt1.equals(pt2)) map.putEdge(pt1, pt2);
             }
         }
     }
