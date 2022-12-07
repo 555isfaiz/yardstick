@@ -98,7 +98,7 @@ public class SAMOVARModel implements BotModel {
         if(this.paths.get(bot.getName()).getWasInStartedWayPoint().compareAndSet(false,true)) {
             System.out.println("Bot is going to start waypoint");
             Waypoint startWayPoint = this.paths.get(bot.getName()).getStartWayPoint();
-            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, startWayPoint.getHighestWalkTarget(bot.getWorld()))));
+            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, startWayPoint.getHighestWalkTarget())));
         }
         if (paths.get(bot.getName()).getWasIdleTime().compareAndSet(false, true)) {
             long idleDuration = 1000 * getPauseDuration();
@@ -108,13 +108,9 @@ public class SAMOVARModel implements BotModel {
         Map<Waypoint, Double> waypoints = paths.get(bot.getName()).getWaypoints();
         Map.Entry<Waypoint, Double> botWayPoint = null;
         for (Map.Entry<Waypoint, Double> entry: waypoints.entrySet()) {
-            try {
-                if (entry.getKey().getHighestWalkTarget(bot.getWorld()).equals(bot.getPlayer().getLocation().intVector())) {
-                    botWayPoint = entry;
-                    break;
-                }
-            } catch (ChunkNotLoadedException chunkNotLoadedException) {
-                chunkNotLoadedException.printStackTrace();
+            if (entry.getKey().getHighestWalkTarget().equals(bot.getPlayer().getLocation().intVector())) {
+                botWayPoint = entry;
+                break;
             }
         }
         // if the world is small, there is a chance that bot wasn't able to reach previous waypoint
@@ -127,7 +123,7 @@ public class SAMOVARModel implements BotModel {
             waypoints.put(botWayPoint.getKey(), botWayPoint.getValue());
         }
         System.out.println("Bot is going to next waypoint");
-        var future = Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, nextWaypoint.getHighestWalkTarget(bot.getWorld())));
+        var future = Failsafe.with(policy).getAsync(() -> new SamovarTaskExecutor(bot, nextWaypoint.getHighestWalkTarget()));
         return new FutureTaskExecutor(future);
     }
 

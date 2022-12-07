@@ -16,8 +16,8 @@ public class Waypoint {
         this.level = level;
     }
 
-    public Vector3i getHighestWalkTarget(World world) throws ChunkNotLoadedException {
-        return new Vector3i(x, world.getHighestBlockAt(x, z).getY() + 1, z);
+    public Vector3i getHighestWalkTarget() {
+        return new Vector3i(x, 4, z);
     }
 
     public double distance(Waypoint a) {
