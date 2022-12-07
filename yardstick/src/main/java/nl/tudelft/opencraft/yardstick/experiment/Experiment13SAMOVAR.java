@@ -53,7 +53,7 @@ public class Experiment13SAMOVAR extends Experiment {
     @Override
     protected void before() {
         this.experimentDuration = behaviorConfig.getDuration("duration");
-        int botsTotal = behaviorConfig.getInt("bots");
+        int botsTotal = behaviorConfig.getInt("botsNum");
         this.samovar = new SAMOVARModel(behaviorConfig, botsTotal);
         Duration timeBetweenJoins = behaviorConfig.getDuration("joininterval");
         int numberOfBotsPerJoin = behaviorConfig.getInt("numbotsperjoin");
