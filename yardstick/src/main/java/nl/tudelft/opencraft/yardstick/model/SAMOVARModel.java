@@ -178,15 +178,13 @@ public class SAMOVARModel implements BotModel {
         };
     }
 
-    public Vector3i nextTargetLocation(Bot bot) {
-        // TODO
-        return null;
-    }
-
     private void makePathForBot() {
         Waypoint startWayPoint = getStartWaypoint();
         int realCapacity = 1;
-        int k = getDistinctVisitedAreas();
+        int k;
+        do {
+            k = getDistinctVisitedAreas();
+        } while (k > map.nodes().size());
         Map<Waypoint, Double> waypoints = new HashMap<>(k);
         waypoints.put(startWayPoint, getPersonalWeight(k));
         Waypoint tmp = startWayPoint;
@@ -197,11 +195,25 @@ public class SAMOVARModel implements BotModel {
                     .limit(k - realCapacity)
                     .collect(Collectors.toSet());
             realCapacity+=newWp.size();
-            newWp.forEach(it -> waypoints.put(it, getPersonalWeight(k)));
-            // TODO how to get next?
+            var newNodes = newWp
+                    .stream()
+                    .filter(node -> !waypoints.containsKey(node)).collect(Collectors.toSet());
+            if (newNodes.size() == 0) {
+                tmp = getRandomNextWaypoint(waypoints);
+                continue;
+            }
+            for (Waypoint newnode: newNodes) {
+                waypoints.put(newnode, getPersonalWeight(k));
+                tmp = newnode;
+            }
         }
         SamovarMetaData samovarMetaData = new SamovarMetaData(startWayPoint, waypoints);
         unsignedPaths.add(samovarMetaData);
+    }
+
+    private Waypoint getRandomNextWaypoint(Map<Waypoint, Double> waypoints) {
+        var waypointArrayList = new ArrayList<>(waypoints.keySet());
+        return waypointArrayList.get(new Random().nextInt(waypointArrayList.size()));
     }
 
     private Waypoint getStartWaypoint() {
