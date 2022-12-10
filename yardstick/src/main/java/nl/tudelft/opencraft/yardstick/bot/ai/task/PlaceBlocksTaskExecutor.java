@@ -82,7 +82,8 @@ public class PlaceBlocksTaskExecutor extends AbstractTaskExecutor {
 
         if (toPlace.getMaterial() != Material.AIR) {
             logger.warn("Block not air: {}", placeAt);
-            return onTick();
+            // return onTick();
+            return TaskStatus.forInProgress();
         }
 
         Hitpoint hit = tryGetHitpoint(bot.getPlayer().getEyeLocation(), toPlace);
