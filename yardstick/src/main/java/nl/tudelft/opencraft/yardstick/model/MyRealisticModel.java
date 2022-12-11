@@ -526,6 +526,7 @@ public class MyRealisticModel implements BotModel{
 
             if (RANDOM.nextInt(10) < 10) {
                 int distance = RANDOM.nextInt(exploreMaxDistance) + 5;
+                state.isExploring = true;
                 state.exploreLocation = getExploreLocation(bot, distance);
                 return new WalkTaskExecutor(bot, state.exploreLocation);
             } 
