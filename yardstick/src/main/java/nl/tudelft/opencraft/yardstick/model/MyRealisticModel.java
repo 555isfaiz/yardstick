@@ -47,17 +47,17 @@ public class MyRealisticModel implements BotModel{
 
     @Override
     public TaskExecutor newTask(Bot bot) {
-
         if (botStates.get(bot.getPlayer().getId()) == null) {
-            int r = RANDOM.nextInt(100);
-            if (counter == 0 || r < 75) {
-                initBotStateBuilder(bot);
-                counter += 1;
-            } else if (r < 95){
-                initBotStateExplorer(bot);
-            } else {
-                initBotStateDestroyer(bot);
-            }
+            // int r = RANDOM.nextInt(100);
+            // if (counter == 0 || r < 75) {
+            //     initBotStateBuilder(bot);
+            //     counter += 1;
+            // } else if (r < 95){
+            //     initBotStateExplorer(bot);
+            // } else {
+            //     initBotStateDestroyer(bot);
+            // }
+            initBotStateExplorer(bot);
         }
 
         return taskManager(bot);
@@ -524,35 +524,35 @@ public class MyRealisticModel implements BotModel{
     private TaskExecutor explorerTask(Bot bot, BotStateExplorer state) {
         if (!state.isExploring && !state.isWaiting) {
 
-            if (RANDOM.nextInt(10) < 8) {
+            if (RANDOM.nextInt(10) < 10) {
                 int distance = RANDOM.nextInt(exploreMaxDistance) + 5;
                 state.exploreLocation = getExploreLocation(bot, distance);
                 return new WalkTaskExecutor(bot, state.exploreLocation);
             } 
             
-            else {
-                state.waitDuration = RANDOM.nextInt(200) + 50;
-                return idle(bot, state.waitDuration);
-            }
+            // else {
+            //     state.waitDuration = RANDOM.nextInt(200) + 50;
+            //     return idle(bot, state.waitDuration);
+            // }
         }
 
-        if (state.isWaiting) {
-            state.waitDuration -= 1;
+        // if (state.isWaiting) {
+        //     state.waitDuration -= 1;
 
-            if (state.waitDuration <= 0) {
-                state.isWaiting = false;
+        //     if (state.waitDuration <= 0) {
+        //         state.isWaiting = false;
 
-                return explorerTask(bot, state);
-            }
+        //         return explorerTask(bot, state);
+        //     }
 
-            return idle(bot, state.waitDuration);
-        }
+        //     return idle(bot, state.waitDuration);
+        // }
 
-        if (isAtApproximateLocation(bot, state.exploreLocation)) {
-            state.isExploring = false;
+        // if (isAtApproximateLocation(bot, state.exploreLocation)) {
+        //     state.isExploring = false;
 
-            return explorerTask(bot, state);
-        }
+        //     return explorerTask(bot, state);
+        // }
 
         return new WalkTaskExecutor(bot, state.exploreLocation);
     }
@@ -564,7 +564,7 @@ public class MyRealisticModel implements BotModel{
         int exploreX = currentLocation.getX() + RANDOM.nextInt(distance * 2) - distance;
         int exploreZ = currentLocation.getZ() + RANDOM.nextInt(distance * 2) - distance;
 
-        return getTargetAt(bot, exploreX, exploreZ);
+        return new Vector3i(exploreX, currentLocation.getY(), exploreZ);//getTargetAt(bot, exploreX, exploreZ);
     }
 
 

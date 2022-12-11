@@ -1,0 +1,1 @@
+java -Dconfig.file=example.conf -Xms4G -Xmx4G -jar yardstick/target/yardstick-2.0.0-SNAPSHOT.jar --address 127.0.0.1:25565 --nodeID 0
