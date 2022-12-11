@@ -1,14 +1,18 @@
 package nl.tudelft.opencraft.yardstick.model;
 
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.jodah.failsafe.Failsafe;
+import net.jodah.failsafe.RetryPolicy;
 import nl.tudelft.opencraft.yardstick.bot.Bot;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.BreakBlocksTaskExecutor;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.PlaceBlocksTaskExecutor;
@@ -26,6 +30,7 @@ import nl.tudelft.opencraft.yardstick.model.BotStates.BotStateExplorer;
 import nl.tudelft.opencraft.yardstick.util.Vector3d;
 import nl.tudelft.opencraft.yardstick.util.Vector3i;
 import nl.tudelft.opencraft.yardstick.util.ZigZagRange;
+import nl.tudelft.opencraft.yardstick.bot.ai.task.FutureTaskExecutor;
 
 public class MyRealisticModel implements BotModel{
 
@@ -33,7 +38,7 @@ public class MyRealisticModel implements BotModel{
 
     private final Logger logger = LoggerFactory.getLogger(MyRealisticModel.class);
 
-    private Map<Integer, BotState> botStates = new HashMap<Integer, BotState>();
+    private Map<Integer, BotState> botStates = new ConcurrentHashMap<Integer, BotState>();
 
     private int counter = 0;
 
@@ -47,7 +52,7 @@ public class MyRealisticModel implements BotModel{
 
     @Override
     public TaskExecutor newTask(Bot bot) {
-        if (botStates.get(bot.getPlayer().getId()) == null) {
+        if (!botStates.containsKey(bot.getPlayer().getId())) {
             // int r = RANDOM.nextInt(100);
             // if (counter == 0 || r < 75) {
             //     initBotStateBuilder(bot);
@@ -66,11 +71,14 @@ public class MyRealisticModel implements BotModel{
 
     public TaskExecutor taskManager(Bot bot) {
         BotState state = botStates.get(bot.getPlayer().getId());
+        var policy = new RetryPolicy<>()
+                .withMaxAttempts(-1)
+                .withBackoff(1, 16, ChronoUnit.SECONDS);
 
         if (state instanceof BotStateBuilder) {
             return builderTask(bot, (BotStateBuilder) state);
         } else if (state instanceof BotStateExplorer) {
-            return explorerTask(bot, (BotStateExplorer) state);
+            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> explorerTask(bot, (BotStateExplorer) state)));
         } else {
             return destroyerTask(bot, (BotStateDestroyer) state);
         }
