@@ -1,6 +1,5 @@
 package nl.tudelft.opencraft.yardstick.model;
 
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,8 +10,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import net.jodah.failsafe.Failsafe;
-import net.jodah.failsafe.RetryPolicy;
 import nl.tudelft.opencraft.yardstick.bot.Bot;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.BreakBlocksTaskExecutor;
 import nl.tudelft.opencraft.yardstick.bot.ai.task.PlaceBlocksTaskExecutor;
@@ -30,7 +27,6 @@ import nl.tudelft.opencraft.yardstick.model.BotStates.BotStateExplorer;
 import nl.tudelft.opencraft.yardstick.util.Vector3d;
 import nl.tudelft.opencraft.yardstick.util.Vector3i;
 import nl.tudelft.opencraft.yardstick.util.ZigZagRange;
-import nl.tudelft.opencraft.yardstick.bot.ai.task.FutureTaskExecutor;
 
 public class MyRealisticModel implements BotModel{
 
@@ -62,7 +58,8 @@ public class MyRealisticModel implements BotModel{
             // } else {
             //     initBotStateDestroyer(bot);
             // }
-            initBotStateExplorer(bot);
+            // initBotStateExplorer(bot);
+            initBotStateBuilder(bot);
         }
 
         return taskManager(bot);
@@ -71,14 +68,11 @@ public class MyRealisticModel implements BotModel{
 
     public TaskExecutor taskManager(Bot bot) {
         BotState state = botStates.get(bot.getPlayer().getId());
-        var policy = new RetryPolicy<>()
-                .withMaxAttempts(-1)
-                .withBackoff(1, 16, ChronoUnit.SECONDS);
 
         if (state instanceof BotStateBuilder) {
             return builderTask(bot, (BotStateBuilder) state);
         } else if (state instanceof BotStateExplorer) {
-            return new FutureTaskExecutor(Failsafe.with(policy).getAsync(() -> explorerTask(bot, (BotStateExplorer) state)));
+            return explorerTask(bot, (BotStateExplorer) state);
         } else {
             return destroyerTask(bot, (BotStateDestroyer) state);
         }
@@ -530,6 +524,7 @@ public class MyRealisticModel implements BotModel{
     ///////////////////////////
 
     private TaskExecutor explorerTask(Bot bot, BotStateExplorer state) {
+
         if (!state.isExploring && !state.isWaiting) {
 
             if (RANDOM.nextInt(10) < 10) {
@@ -539,35 +534,28 @@ public class MyRealisticModel implements BotModel{
                 return new WalkTaskExecutor(bot, state.exploreLocation);
             } 
             
-            // else {
-            //     state.waitDuration = RANDOM.nextInt(200) + 50;
-            //     return idle(bot, state.waitDuration);
-            // }
+            else {
+                state.waitDuration = RANDOM.nextInt(200) + 50;
+                return idle(bot, state.waitDuration);
+            }
         }
 
-        // if (state.isWaiting) {
-        //     state.waitDuration -= 1;
+        if (state.isWaiting) {
+            state.waitDuration -= 1;
 
-        //     if (state.waitDuration <= 0) {
-        //         state.isWaiting = false;
+            if (state.waitDuration <= 0) {
+                state.isWaiting = false;
 
-        //         return explorerTask(bot, state);
-        //     }
+                return explorerTask(bot, state);
+            }
 
-        //     return idle(bot, state.waitDuration);
-        // }
+            return idle(bot, state.waitDuration);
+        }
 
-        // if (isAtApproximateLocation(bot, state.exploreLocation)) {
-        //     state.isExploring = false;
+        if (isAtApproximateLocation(bot, state.exploreLocation)) {
+            state.isExploring = false;
 
-        //     return explorerTask(bot, state);
-        // }
-
-        if (RANDOM.nextInt(100) < 95) {
-            int distance = RANDOM.nextInt(exploreMaxDistance) + 5;
-            state.isExploring = true;
-            state.exploreLocation = getExploreLocation(bot, distance);
-            return new WalkTaskExecutor(bot, state.exploreLocation);
+            return explorerTask(bot, state);
         }
 
         return new WalkTaskExecutor(bot, state.exploreLocation);

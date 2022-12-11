@@ -47,7 +47,7 @@ public class Experiment14MyRealisticModel extends Experiment {
 
 
     public Experiment14MyRealisticModel(int nodeID, GameArchitecture game, Config behaviorConfig) {
-        super(14, nodeID, game, "latency and walk experiment with SAMOVAR model");
+        super(14, nodeID, game, "latency and behavior test with a more realistic model");
         this.behaviorConfig = behaviorConfig;
     }
 
